@@ -167,7 +167,8 @@ func InitBandwidthManager() {
 					LinkIndex: link.Attrs().Index,
 					Parent:    netlink.HANDLE_ROOT,
 				},
-				Pacing: 1,
+				Pacing:  1,
+				Horizon: uint32(bwmap.DefaultDropHorizon),
 			}
 			// At this point there is nothing we can do about
 			// it if we fail here, so hard bail out.
