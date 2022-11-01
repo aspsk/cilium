@@ -460,8 +460,6 @@ func finishKubeProxyReplacementInit() error {
 		case option.Config.IptablesMasqueradingEnabled():
 			msg = fmt.Sprintf("BPF host routing requires %s.", option.EnableBPFMasquerade)
 		// All cases below still need to be implemented ...
-		case option.Config.EnableEndpointRoutes:
-			msg = fmt.Sprintf("BPF host routing is currently not supported with %s.", option.EnableEndpointRoutes)
 		case !mac.HaveMACAddrs(option.Config.GetDevices()):
 			msg = "BPF host routing is currently not supported with devices without L2 addr."
 		case option.Config.EnableWireguard:
