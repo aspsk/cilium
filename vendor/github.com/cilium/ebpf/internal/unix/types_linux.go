@@ -49,9 +49,12 @@ const (
 	EPOLL_CLOEXEC             = linux.EPOLL_CLOEXEC
 	O_CLOEXEC                 = linux.O_CLOEXEC
 	O_NONBLOCK                = linux.O_NONBLOCK
+	PROT_NONE                 = linux.PROT_NONE
 	PROT_READ                 = linux.PROT_READ
 	PROT_WRITE                = linux.PROT_WRITE
+	MAP_ANON                  = linux.MAP_ANON
 	MAP_SHARED                = linux.MAP_SHARED
+	MAP_PRIVATE               = linux.MAP_PRIVATE
 	PERF_ATTR_SIZE_VER1       = linux.PERF_ATTR_SIZE_VER1
 	PERF_TYPE_SOFTWARE        = linux.PERF_TYPE_SOFTWARE
 	PERF_TYPE_TRACEPOINT      = linux.PERF_TYPE_TRACEPOINT
@@ -77,6 +80,9 @@ const (
 	SIG_UNBLOCK               = linux.SIG_UNBLOCK
 	EM_NONE                   = linux.EM_NONE
 	EM_BPF                    = linux.EM_BPF
+	BPF_FS_MAGIC              = linux.BPF_FS_MAGIC
+	TRACEFS_MAGIC             = linux.TRACEFS_MAGIC
+	DEBUGFS_MAGIC             = linux.DEBUGFS_MAGIC
 )
 
 type Statfs_t = linux.Statfs_t

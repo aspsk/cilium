@@ -17,6 +17,17 @@ const maxTypeDepth = 32
 type TypeID uint32
 
 // Type represents a type described by BTF.
+//
+// Identity of Type follows the [Go specification]: two Types are considered
+// equal if they have the same concrete type and the same dynamic value, aka
+// they point at the same location in memory. This means that the following
+// Types are considered distinct even though they have the same "shape".
+//
+//	a := &Int{Size: 1}
+//	b := &Int{Size: 1}
+//	a != b
+//
+// [Go specification]: https://go.dev/ref/spec#Comparison_operators
 type Type interface {
 	// Type can be formatted using the %s and %v verbs. %s outputs only the
 	// identity of the type, without any detail. %v outputs additional detail.
@@ -646,16 +657,31 @@ func Sizeof(typ Type) (int, error) {
 
 // alignof returns the alignment of a type.
 //
-// Currently only supports the subset of types necessary for bitfield relocations.
+// Returns an error if the Type can't be aligned, like an integer with an uneven
+// size. Currently only supports the subset of types necessary for bitfield
+// relocations.
 func alignof(typ Type) (int, error) {
+	var n int
+
 	switch t := UnderlyingType(typ).(type) {
 	case *Enum:
-		return int(t.size()), nil
+		n = int(t.size())
 	case *Int:
-		return int(t.Size), nil
+		n = int(t.Size)
 	default:
 		return 0, fmt.Errorf("can't calculate alignment of %T", t)
 	}
+
+	if !pow(n) {
+		return 0, fmt.Errorf("alignment value %d is not a power of two", n)
+	}
+
+	return n, nil
+}
+
+// pow returns true if n is a power of two.
+func pow(n int) bool {
+	return n != 0 && (n&(n-1)) == 0
 }
 
 // Transformer modifies a given Type and returns the result.

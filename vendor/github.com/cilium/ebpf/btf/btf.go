@@ -2,7 +2,6 @@ package btf
 
 import (
 	"bufio"
-	"bytes"
 	"debug/elf"
 	"encoding/binary"
 	"errors"
@@ -31,11 +30,9 @@ var (
 // ID represents the unique ID of a BTF object.
 type ID = sys.BTFID
 
-// Spec represents decoded BTF.
+// Spec allows querying a set of Types and loading the set into the
+// kernel.
 type Spec struct {
-	// Data from .BTF.
-	strings *stringTable
-
 	// All types contained by the spec, not including types from the base in
 	// case the spec was parsed from split BTF.
 	types []Type
@@ -43,10 +40,17 @@ type Spec struct {
 	// Type IDs indexed by type.
 	typeIDs map[Type]TypeID
 
+	// The last allocated type ID.
+	lastTypeID TypeID
+
 	// Types indexed by essential name.
 	// Includes all struct flavors and types with the same name.
 	namedTypes map[essentialName][]Type
 
+	// String table from ELF, may be nil.
+	strings *stringTable
+
+	// Byte order of the ELF we decoded the spec from, may be nil.
 	byteOrder binary.ByteOrder
 }
 
@@ -74,6 +78,18 @@ func (h *btfHeader) typeStart() int64 {
 // to the start of its string table.
 func (h *btfHeader) stringStart() int64 {
 	return int64(h.HdrLen + h.StringOff)
+}
+
+// NewSpec creates a Spec containing only Void.
+func NewSpec() *Spec {
+	return &Spec{
+		[]Type{(*Void)(nil)},
+		map[Type]TypeID{(*Void)(nil): 0},
+		0,
+		make(map[essentialName][]Type),
+		nil,
+		nil,
+	}
 }
 
 // LoadSpec opens file and calls LoadSpecFromReader on it.
@@ -214,7 +230,6 @@ func loadSpecFromELF(file *internal.SafeELFFile) (*Spec, error) {
 
 func loadRawSpec(btf io.ReaderAt, bo binary.ByteOrder,
 	baseTypes types, baseStrings *stringTable) (*Spec, error) {
-
 	rawTypes, rawStrings, err := parseBTF(btf, bo, baseStrings)
 	if err != nil {
 		return nil, err
@@ -225,18 +240,19 @@ func loadRawSpec(btf io.ReaderAt, bo binary.ByteOrder,
 		return nil, err
 	}
 
-	typeIDs, typesByName := indexTypes(types, TypeID(len(baseTypes)))
+	typeIDs, typesByName, lastTypeID := indexTypes(types, TypeID(len(baseTypes)))
 
 	return &Spec{
 		namedTypes: typesByName,
 		typeIDs:    typeIDs,
 		types:      types,
+		lastTypeID: lastTypeID,
 		strings:    rawStrings,
 		byteOrder:  bo,
 	}, nil
 }
 
-func indexTypes(types []Type, typeIDOffset TypeID) (map[Type]TypeID, map[essentialName][]Type) {
+func indexTypes(types []Type, typeIDOffset TypeID) (map[Type]TypeID, map[essentialName][]Type, TypeID) {
 	namedTypes := 0
 	for _, typ := range types {
 		if typ.TypeName() != "" {
@@ -250,14 +266,16 @@ func indexTypes(types []Type, typeIDOffset TypeID) (map[Type]TypeID, map[essenti
 	typeIDs := make(map[Type]TypeID, len(types))
 	typesByName := make(map[essentialName][]Type, namedTypes)
 
+	var lastTypeID TypeID
 	for i, typ := range types {
 		if name := newEssentialName(typ.TypeName()); name != "" {
 			typesByName[name] = append(typesByName[name], typ)
 		}
-		typeIDs[typ] = TypeID(i) + typeIDOffset
+		lastTypeID = TypeID(i) + typeIDOffset
+		typeIDs[typ] = lastTypeID
 	}
 
-	return typeIDs, typesByName
+	return typeIDs, typesByName, lastTypeID
 }
 
 // LoadKernelSpec returns the current kernel's BTF information.
@@ -266,7 +284,10 @@ func indexTypes(types []Type, typeIDOffset TypeID) (map[Type]TypeID, map[essenti
 // for vmlinux ELFs. Returns an error wrapping ErrNotSupported if BTF is not enabled.
 func LoadKernelSpec() (*Spec, error) {
 	spec, _, err := kernelSpec()
-	return spec, err
+	if err != nil {
+		return nil, err
+	}
+	return spec.Copy(), nil
 }
 
 var kernelBTF struct {
@@ -297,7 +318,7 @@ func kernelSpec() (*Spec, bool, error) {
 	}
 
 	if spec != nil {
-		return spec.Copy(), fallback, nil
+		return spec, fallback, nil
 	}
 
 	spec, fallback, err := loadKernelSpec()
@@ -306,7 +327,7 @@ func kernelSpec() (*Spec, bool, error) {
 	}
 
 	kernelBTF.spec, kernelBTF.fallback = spec, fallback
-	return spec.Copy(), fallback, nil
+	return spec, fallback, nil
 }
 
 func loadKernelSpec() (_ *Spec, fallback bool, _ error) {
@@ -433,6 +454,8 @@ type symbol struct {
 	name    string
 }
 
+// fixupDatasec attempts to patch up missing info in Datasecs and its members by
+// supplementing them with information from the ELF headers and symbol table.
 func fixupDatasec(types []Type, sectionSizes map[string]uint32, offsets map[symbol]uint32) error {
 	for _, typ := range types {
 		ds, ok := typ.(*Datasec)
@@ -441,8 +464,27 @@ func fixupDatasec(types []Type, sectionSizes map[string]uint32, offsets map[symb
 		}
 
 		name := ds.Name
-		if name == ".kconfig" || name == ".ksyms" {
+
+		// Some Datasecs are virtual and don't have corresponding ELF sections.
+		switch name {
+		case ".ksyms":
+			// .ksyms describes forward declarations of kfunc signatures.
+			// Nothing to fix up, all sizes and offsets are 0.
+			// Explicitly reject for now until we officially support kfuncs.
 			return fmt.Errorf("reference to %s: %w", name, ErrNotSupported)
+		case ".kconfig":
+			// .kconfig has a size of 0 and has all members' offsets set to 0.
+			// Fix up all offsets and set the Datasec's size.
+			if err := fixupDatasecLayout(ds); err != nil {
+				return err
+			}
+
+			// Fix up extern to global linkage to avoid a BTF verifier error.
+			for _, vsi := range ds.Vars {
+				vsi.Type.(*Var).Linkage = GlobalVar
+			}
+
+			continue
 		}
 
 		if ds.Size != 0 {
@@ -466,18 +508,52 @@ func fixupDatasec(types []Type, sectionSizes map[string]uint32, offsets map[symb
 	return nil
 }
 
+// fixupDatasecLayout populates ds.Vars[].Offset according to var sizes and
+// alignment. Calculate and set ds.Size.
+func fixupDatasecLayout(ds *Datasec) error {
+	var off uint32
+
+	for i, vsi := range ds.Vars {
+		v, ok := vsi.Type.(*Var)
+		if !ok {
+			return fmt.Errorf("member %d: unsupported type %T", i, vsi.Type)
+		}
+
+		size, err := Sizeof(v.Type)
+		if err != nil {
+			return fmt.Errorf("variable %s: getting size: %w", v.Name, err)
+		}
+		align, err := alignof(v.Type)
+		if err != nil {
+			return fmt.Errorf("variable %s: getting alignment: %w", v.Name, err)
+		}
+
+		// Align the current member based on the offset of the end of the previous
+		// member and the alignment of the current member.
+		off = internal.Align(off, uint32(align))
+
+		ds.Vars[i].Offset = off
+
+		off += uint32(size)
+	}
+
+	ds.Size = off
+
+	return nil
+}
+
 // Copy creates a copy of Spec.
 func (s *Spec) Copy() *Spec {
 	types := copyTypes(s.types, nil)
-
-	typeIDs, typesByName := indexTypes(types, s.firstTypeID())
+	typeIDs, typesByName, lastTypeID := indexTypes(types, s.firstTypeID())
 
 	// NB: Other parts of spec are not copied since they are immutable.
 	return &Spec{
-		s.strings,
 		types,
 		typeIDs,
+		lastTypeID,
 		typesByName,
+		s.strings,
 		s.byteOrder,
 	}
 }
@@ -490,6 +566,36 @@ func (sw sliceWriter) Write(p []byte) (int, error) {
 	}
 
 	return copy(sw, p), nil
+}
+
+// Add a Type to the Spec, making it queryable via [TypeByName], etc.
+//
+// Adding the identical Type multiple times is valid and will return a stable ID.
+//
+// See [Type] for details on identity.
+func (s *Spec) Add(typ Type) (TypeID, error) {
+	if typ == nil {
+		return 0, fmt.Errorf("can't add nil Type")
+	}
+
+	if id, err := s.TypeID(typ); err == nil {
+		return id, nil
+	}
+
+	id := s.lastTypeID + 1
+	if id < s.lastTypeID {
+		return 0, fmt.Errorf("type ID overflow")
+	}
+
+	s.typeIDs[typ] = id
+	s.types = append(s.types, typ)
+	s.lastTypeID = id
+
+	if name := newEssentialName(typ.TypeName()); name != "" {
+		s.namedTypes[name] = append(s.namedTypes[name], typ)
+	}
+
+	return id, nil
 }
 
 // TypeByID returns the BTF Type with the given type ID.
@@ -638,12 +744,16 @@ func (s *Spec) firstTypeID() TypeID {
 // Types from base are used to resolve references in the split BTF.
 // The returned Spec only contains types from the split BTF, not from the base.
 func LoadSplitSpecFromReader(r io.ReaderAt, base *Spec) (*Spec, error) {
+	if base.strings == nil {
+		return nil, fmt.Errorf("parse split BTF: base must be loaded from an ELF")
+	}
+
 	return loadRawSpec(r, internal.NativeEndian, base.types, base.strings)
 }
 
 // TypesIterator iterates over types of a given spec.
 type TypesIterator struct {
-	spec  *Spec
+	types []Type
 	index int
 	// The last visited type in the spec.
 	Type Type
@@ -651,69 +761,31 @@ type TypesIterator struct {
 
 // Iterate returns the types iterator.
 func (s *Spec) Iterate() *TypesIterator {
-	return &TypesIterator{spec: s, index: 0}
+	// We share the backing array of types with the Spec. This is safe since
+	// we don't allow deletion or shuffling of types.
+	return &TypesIterator{types: s.types, index: 0}
 }
 
 // Next returns true as long as there are any remaining types.
 func (iter *TypesIterator) Next() bool {
-	if len(iter.spec.types) <= iter.index {
+	if len(iter.types) <= iter.index {
 		return false
 	}
 
-	iter.Type = iter.spec.types[iter.index]
+	iter.Type = iter.types[iter.index]
 	iter.index++
 	return true
-}
-
-func marshalBTF(types interface{}, strings []byte, bo binary.ByteOrder) []byte {
-	const minHeaderLength = 24
-
-	typesLen := uint32(binary.Size(types))
-	header := btfHeader{
-		Magic:     btfMagic,
-		Version:   1,
-		HdrLen:    minHeaderLength,
-		TypeOff:   0,
-		TypeLen:   typesLen,
-		StringOff: typesLen,
-		StringLen: uint32(len(strings)),
-	}
-
-	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, bo, &header)
-	_ = binary.Write(buf, bo, types)
-	buf.Write(strings)
-
-	return buf.Bytes()
 }
 
 // haveBTF attempts to load a BTF blob containing an Int. It should pass on any
 // kernel that supports BPF_BTF_LOAD.
 var haveBTF = internal.NewFeatureTest("BTF", "4.18", func() error {
-	var (
-		types struct {
-			Integer btfType
-			btfInt
-		}
-		strings = []byte{0}
-	)
-	types.Integer.SetKind(kindInt) // 0-length anonymous integer
-
-	btf := marshalBTF(&types, strings, internal.NativeEndian)
-
-	fd, err := sys.BtfLoad(&sys.BtfLoadAttr{
-		Btf:     sys.NewSlicePointer(btf),
-		BtfSize: uint32(len(btf)),
-	})
+	// 0-length anonymous integer
+	err := probeBTF(&Int{})
 	if errors.Is(err, unix.EINVAL) || errors.Is(err, unix.EPERM) {
 		return internal.ErrNotSupported
 	}
-	if err != nil {
-		return err
-	}
-
-	fd.Close()
-	return nil
+	return err
 })
 
 // haveMapBTF attempts to load a minimal BTF blob containing a Var. It is
@@ -724,37 +796,18 @@ var haveMapBTF = internal.NewFeatureTest("Map BTF (Var/Datasec)", "5.2", func() 
 		return err
 	}
 
-	var (
-		types struct {
-			Integer btfType
-			Var     btfType
-			btfVariable
-		}
-		strings = []byte{0, 'a', 0}
-	)
+	v := &Var{
+		Name: "a",
+		Type: &Pointer{(*Void)(nil)},
+	}
 
-	types.Integer.SetKind(kindPointer)
-	types.Var.NameOff = 1
-	types.Var.SetKind(kindVar)
-	types.Var.SizeType = 1
-
-	btf := marshalBTF(&types, strings, internal.NativeEndian)
-
-	fd, err := sys.BtfLoad(&sys.BtfLoadAttr{
-		Btf:     sys.NewSlicePointer(btf),
-		BtfSize: uint32(len(btf)),
-	})
+	err := probeBTF(v)
 	if errors.Is(err, unix.EINVAL) || errors.Is(err, unix.EPERM) {
 		// Treat both EINVAL and EPERM as not supported: creating the map may still
 		// succeed without Btf* attrs.
 		return internal.ErrNotSupported
 	}
-	if err != nil {
-		return err
-	}
-
-	fd.Close()
-	return nil
+	return err
 })
 
 // haveProgBTF attempts to load a BTF blob containing a Func and FuncProto. It
@@ -765,34 +818,16 @@ var haveProgBTF = internal.NewFeatureTest("Program BTF (func/line_info)", "5.0",
 		return err
 	}
 
-	var (
-		types struct {
-			FuncProto btfType
-			Func      btfType
-		}
-		strings = []byte{0, 'a', 0}
-	)
+	fn := &Func{
+		Name: "a",
+		Type: &FuncProto{Return: (*Void)(nil)},
+	}
 
-	types.FuncProto.SetKind(kindFuncProto)
-	types.Func.SetKind(kindFunc)
-	types.Func.SizeType = 1 // aka FuncProto
-	types.Func.NameOff = 1
-
-	btf := marshalBTF(&types, strings, internal.NativeEndian)
-
-	fd, err := sys.BtfLoad(&sys.BtfLoadAttr{
-		Btf:     sys.NewSlicePointer(btf),
-		BtfSize: uint32(len(btf)),
-	})
+	err := probeBTF(fn)
 	if errors.Is(err, unix.EINVAL) || errors.Is(err, unix.EPERM) {
 		return internal.ErrNotSupported
 	}
-	if err != nil {
-		return err
-	}
-
-	fd.Close()
-	return nil
+	return err
 })
 
 var haveFuncLinkage = internal.NewFeatureTest("BTF func linkage", "5.6", func() error {
@@ -800,33 +835,35 @@ var haveFuncLinkage = internal.NewFeatureTest("BTF func linkage", "5.6", func() 
 		return err
 	}
 
-	var (
-		types struct {
-			FuncProto btfType
-			Func      btfType
-		}
-		strings = []byte{0, 'a', 0}
-	)
+	fn := &Func{
+		Name:    "a",
+		Type:    &FuncProto{Return: (*Void)(nil)},
+		Linkage: GlobalFunc,
+	}
 
-	types.FuncProto.SetKind(kindFuncProto)
-	types.Func.SetKind(kindFunc)
-	types.Func.SizeType = 1 // aka FuncProto
-	types.Func.NameOff = 1
-	types.Func.SetLinkage(GlobalFunc)
-
-	btf := marshalBTF(&types, strings, internal.NativeEndian)
-
-	fd, err := sys.BtfLoad(&sys.BtfLoadAttr{
-		Btf:     sys.NewSlicePointer(btf),
-		BtfSize: uint32(len(btf)),
-	})
+	err := probeBTF(fn)
 	if errors.Is(err, unix.EINVAL) {
 		return internal.ErrNotSupported
 	}
-	if err != nil {
+	return err
+})
+
+func probeBTF(typ Type) error {
+	buf := getBuffer()
+	defer putBuffer(buf)
+
+	if err := marshalTypes(buf, []Type{&Void{}, typ}, nil, nil); err != nil {
 		return err
 	}
 
-	fd.Close()
-	return nil
-})
+	fd, err := sys.BtfLoad(&sys.BtfLoadAttr{
+		Btf:     sys.NewSlicePointer(buf.Bytes()),
+		BtfSize: uint32(buf.Len()),
+	})
+
+	if err == nil {
+		fd.Close()
+	}
+
+	return err
+}
