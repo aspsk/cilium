@@ -97,10 +97,12 @@ func (pe *PolicyEntry) String() string {
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=github.com/cilium/cilium/pkg/bpf.MapKey
 type PolicyKey struct {
-	Identity         uint32 `align:"sec_label"`
-	DestPort         uint16 `align:"dport"` // In network byte-order
-	Nexthdr          uint8  `align:"protocol"`
-	TrafficDirection uint8  `align:"egress"`
+	Type             uint32 `align:"type"`
+	Priority         uint32 `align:"priority"`
+	Identity         uint32 `align:"$union0.rule.sec_label"`
+	DestPort         uint16 `align:"$union0.rule.dport"` // In network byte-order
+	Nexthdr          uint8  `align:"$union0.rule.protocol"`
+	TrafficDirection uint8  `align:"$union0.rule.flags"`
 }
 
 // SizeofPolicyKey is the size of type PolicyKey.
@@ -386,8 +388,9 @@ func (pm *PolicyMap) DumpToSlice() (PolicyEntriesDump, error) {
 }
 
 func newMap(path string) *PolicyMap {
-	mapType := bpf.MapTypeHash
-	flags := bpf.GetPreAllocateMapFlags(mapType)
+	mapType := bpf.BPF_MAP_TYPE_WILDCARD
+	flags := uint32(1) // bpf.GetPreAllocateMapFlags(mapType)
+	//flags := bpf.GetPreAllocateMapFlags(mapType)
 	return &PolicyMap{
 		Map: bpf.NewMap(
 			path,
