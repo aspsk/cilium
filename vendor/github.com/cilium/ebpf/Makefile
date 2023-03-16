@@ -28,6 +28,7 @@ TARGETS := \
 	testdata/loader-clang-7 \
 	testdata/loader-clang-9 \
 	testdata/loader-$(CLANG) \
+	testdata/manyprogs \
 	testdata/btf_map_init \
 	testdata/invalid_map \
 	testdata/raw_tracepoint \
@@ -39,6 +40,7 @@ TARGETS := \
 	testdata/map_spin_lock \
 	testdata/subprog_reloc \
 	testdata/fwd_decl \
+	testdata/kconfig \
 	btf/testdata/relocs \
 	btf/testdata/relocs_read \
 	btf/testdata/relocs_read_tgt

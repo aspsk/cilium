@@ -20,7 +20,7 @@ require (
 	github.com/cilium/coverbee v0.3.2
 	github.com/cilium/customvet v0.0.0-20221207181232-aa8731fa2d27
 	github.com/cilium/deepequal-gen v0.0.0-20200406125435-ad6a9003139e
-	github.com/cilium/ebpf v0.10.0
+	github.com/cilium/ebpf v0.10.1-0.20230314095333-3945fa593427
 	github.com/cilium/ipam v0.0.0-20220824141044-46ef3d556735
 	github.com/cilium/kafka v0.0.0-20180809090225-01ce283b732b
 	github.com/cilium/lumberjack/v2 v2.3.0

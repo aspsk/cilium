@@ -462,7 +462,7 @@ func (p *Program) Clone() (*Program, error) {
 // the new path already exists. Re-pinning across filesystems is not supported.
 //
 // This requires bpffs to be mounted above fileName.
-// See https://docs.cilium.io/en/stable/concepts/kubernetes/configuration/#mounting-bpffs-with-systemd
+// See https://docs.cilium.io/en/stable/network/kubernetes/configuration/#mounting-bpffs-with-systemd
 func (p *Program) Pin(fileName string) error {
 	if err := internal.Pin(p.pinnedPath, fileName, p.fd); err != nil {
 		return err
@@ -783,7 +783,14 @@ func LoadPinnedProgram(fileName string, opts *LoadPinOptions) (*Program, error) 
 		return nil, fmt.Errorf("info for %s: %w", fileName, err)
 	}
 
-	return &Program{"", fd, filepath.Base(fileName), fileName, info.Type}, nil
+	var progName string
+	if haveObjName() == nil {
+		progName = info.Name
+	} else {
+		progName = filepath.Base(fileName)
+	}
+
+	return &Program{"", fd, progName, fileName, info.Type}, nil
 }
 
 // SanitizeName replaces all invalid characters in name with replacement.
