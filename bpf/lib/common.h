@@ -322,13 +322,17 @@ struct remote_endpoint_info {
 	__u8		key;
 };
 
-struct policy_key {
-	__u32		sec_label;
-	__u16		dport;
-	__u8		protocol;
-	__u8		egress:1,
-			pad:7;
-};
+/*
+ * Defines the 'struct policy_key' and 'struct policy_desc' structures. The
+ * latter is passed to the kernel via BTF inside 'struct policy_key'.
+ */
+BPF_WILDCARD_DESC_4(
+        policy,
+        BPF_WILDCARD_RULE_WILDCARD_MATCH, __u32, sec_label,
+        BPF_WILDCARD_RULE_RANGE, __u16, dport,
+        BPF_WILDCARD_RULE_WILDCARD_MATCH, __u8, protocol,
+        BPF_WILDCARD_RULE_MATCH, __u8, flags
+);
 
 struct policy_entry {
 	__be16		proxy_port;

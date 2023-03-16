@@ -55,6 +55,8 @@ type Identities interface {
 // intentionally duplicated from pkg/maps/policymap to avoid pulling in the
 // BPF dependency to this package.
 type Key struct {
+	Type     uint32
+	Priority uint32
 	// Identity is the numeric identity to / from which traffic is allowed.
 	Identity uint32
 	// DestPort is the port at L4 to / from which traffic is allowed, in

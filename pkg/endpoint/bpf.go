@@ -1368,8 +1368,17 @@ func (e *Endpoint) dumpPolicyMapToMapState() (policy.MapState, error) {
 	currentMap := make(policy.MapState)
 
 	cb := func(key bpf.MapKey, value bpf.MapValue) {
+
+		realPolicyKey := key.(*policymap.RealPolicyKey)
+
 		// Convert key to host byte-order. ToHost() makes a copy.
-		keyHostOrder := key.(*policymap.PolicyKey).ToHost()
+		policyKeyHostOrder := policymap.PolicyKey{
+			Identity:         realPolicyKey.Identity,
+			DestPort:         realPolicyKey.DestPortMin,
+			Nexthdr:          realPolicyKey.Nexthdr,
+			TrafficDirection: realPolicyKey.TrafficDirection,
+		}
+		keyHostOrder := policyKeyHostOrder.ToHost()
 		// Convert from policymap.Key to policy.Key
 		policyKey := policy.Key{
 			Identity:         keyHostOrder.Identity,

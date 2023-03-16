@@ -24,6 +24,8 @@ import (
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/spanstat"
+
+	"github.com/cilium/ebpf/btf"
 )
 
 // CreateMap creates a Map of type mapType, with key size keySize, a value size of
@@ -45,6 +47,18 @@ func CreateMap(mapType MapType, keySize, valueSize, maxEntries, flags, innerID u
 	return int(ret), nil
 }
 
+func gimmeID(spec *btf.Spec, name string) uint32 {
+	types, err := spec.AnyTypesByName(name)
+	if err != nil {
+		return uint32(0)
+	}
+	for _, typ := range types {
+		id, _ := spec.TypeID(typ)
+		return uint32(id)
+	}
+	return uint32(0)
+}
+
 func createMap(mapType MapType, keySize, valueSize, maxEntries, flags, innerID uint32, fullPath string) (int, syscall.Errno) {
 	var (
 		uba     unsafe.Pointer
@@ -57,16 +71,62 @@ func createMap(mapType MapType, keySize, valueSize, maxEntries, flags, innerID u
 	} else {
 		copy(name[:], p)
 	}
-	u := ubaMapName{
-		ubaCommon: ubaCommon{
-			mapType:    uint32(mapType),
-			keySize:    keySize,
-			valueSize:  valueSize,
-			maxEntries: maxEntries,
-			mapFlags:   flags,
-			innerID:    innerID,
-		},
-		mapName: name,
+	var u ubaMapName
+	if mapType == BPF_MAP_TYPE_WILDCARD {
+
+		var btfPath string = "/run/cilium/state/bpf_alignchecker.o"
+		var btf_fd uint32
+		var btf_key_type_id uint32
+		var btf_value_type_id uint32
+
+		btfSpec, err2 := btf.LoadSpec(btfPath)
+		if err2 != nil {
+			fmt.Printf("XXX: btf.LoadSpec: %v\n", err2)
+			return -1, 33
+		} else {
+			btf_key_type_id = gimmeID(btfSpec, "policy_key")
+			fmt.Printf("XXX: type_id(policy_key)=%u\n", btf_key_type_id)
+			btf_value_type_id = gimmeID(btfSpec, "policy_entry")
+			fmt.Printf("XXX: type_id(policy_entry)=%u\n", btf_value_type_id)
+
+			handle, err2 := btf.NewHandle(btfSpec)
+			if err2 != nil {
+				fmt.Printf("XXX: btf.NewHandle: %v\n", err2)
+				return -1, 33
+			} else {
+				fmt.Printf("XXX: btf.NewHandle: fd=%v\n", handle.FD())
+			}
+
+			btf_fd = uint32(handle.FD())
+		}
+
+		u = ubaMapName{
+			ubaCommon: ubaCommon{
+				mapType: uint32(mapType),
+				//keySize:    keySize,
+				keySize:    18, // :facepalm: but I don't have time to fight with Go ATM
+				valueSize:  valueSize,
+				maxEntries: maxEntries,
+				mapFlags:   flags,
+				innerID:    innerID,
+			},
+			mapName:           name,
+			btf_fd:            btf_fd,
+			btf_key_type_id:   btf_key_type_id,
+			btf_value_type_id: btf_value_type_id,
+		}
+	} else {
+		u = ubaMapName{
+			ubaCommon: ubaCommon{
+				mapType:    uint32(mapType),
+				keySize:    keySize,
+				valueSize:  valueSize,
+				maxEntries: maxEntries,
+				mapFlags:   flags,
+				innerID:    innerID,
+			},
+			mapName: name,
+		}
 	}
 	uba = unsafe.Pointer(&u)
 	ubaSize = unsafe.Sizeof(u)
@@ -104,8 +164,13 @@ type ubaCommon struct {
 // used by the BPF_MAP_CREATE command
 type ubaMapName struct {
 	ubaCommon
-	numaNode uint32
-	mapName  [16]byte
+	numaNode                  uint32
+	mapName                   [16]byte
+	mapIfindex                uint32 // unused
+	btf_fd                    uint32
+	btf_key_type_id           uint32
+	btf_value_type_id         uint32
+	btf_vmlinux_value_type_id uint32
 }
 
 // This struct must be in sync with union bpf_attr's anonymous struct used by
