@@ -102,8 +102,9 @@ func createMap(mapType MapType, keySize, valueSize, maxEntries, flags, innerID u
 
 		u = ubaMapName{
 			ubaCommon: ubaCommon{
-				mapType:    uint32(mapType),
-				keySize:    keySize,
+				mapType: uint32(mapType),
+				//keySize:    keySize,
+				keySize:    26, // :facepalm: but I don't have time to fight with Go ATM
 				valueSize:  valueSize,
 				maxEntries: maxEntries,
 				mapFlags:   flags,

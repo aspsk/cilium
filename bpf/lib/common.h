@@ -328,9 +328,9 @@ struct remote_endpoint_info {
  */
 BPF_WILDCARD_DESC_4(
         policy,
-        BPF_WILDCARD_RULE_MATCH, __u32, sec_label,
-        BPF_WILDCARD_RULE_MATCH, __u16, dport,
-        BPF_WILDCARD_RULE_MATCH, __u8, protocol,
+        BPF_WILDCARD_RULE_PREFIX, __u32, sec_label,
+        BPF_WILDCARD_RULE_RANGE, __u16, dport,
+        BPF_WILDCARD_RULE_PREFIX, __u8, protocol,
         BPF_WILDCARD_RULE_MATCH, __u8, flags
 );
 
