@@ -11,6 +11,13 @@
 #include "neigh.h"
 #include "l3.h"
 
+/*
+ * Do a fib lookup if there is more than one output device
+ * or per-endpoint routes are enabled
+ */
+#define ENABLE_FIB_LOOKUP (!is_defined(ENABLE_SKIP_FIB) || \
+			   is_defined(ENABLE_ENDPOINT_ROUTES))
+
 static __always_inline int
 maybe_add_l2_hdr(struct __ctx_buff *ctx __maybe_unused,
 		 __u32 ifindex __maybe_unused,
@@ -57,7 +64,7 @@ fib_redirect(struct __ctx_buff *ctx, const bool needs_l2_check,
 	bool no_neigh = is_defined(ENABLE_SKIP_FIB);
 	int ret;
 
-#ifndef ENABLE_SKIP_FIB
+#if ENABLE_FIB_LOOKUP
 	ret = fib_lookup(ctx, &fib_params->l, sizeof(fib_params->l),
 			 BPF_FIB_LOOKUP_DIRECT);
 	if (ret != BPF_FIB_LKUP_RET_SUCCESS) {
@@ -85,7 +92,7 @@ skip_oif:
 #else
 	*oif = DIRECT_ROUTING_DEV_IFINDEX;
 	nh_params.nh_family = fib_params->l.family;
-#endif /* ENABLE_SKIP_FIB */
+#endif /* ENABLE_FIB_LOOKUP */
 	if (needs_l2_check) {
 		bool l2_hdr_required = true;
 
