@@ -328,9 +328,9 @@ struct remote_endpoint_info {
  */
 BPF_WILDCARD_DESC_4(
         policy,
-        BPF_WILDCARD_RULE_PREFIX, __u32, sec_label,
+        BPF_WILDCARD_RULE_WILDCARD_MATCH, __u32, sec_label,
         BPF_WILDCARD_RULE_RANGE, __u16, dport,
-        BPF_WILDCARD_RULE_PREFIX, __u8, protocol,
+        BPF_WILDCARD_RULE_WILDCARD_MATCH, __u8, protocol,
         BPF_WILDCARD_RULE_MATCH, __u8, flags
 );
 
@@ -339,8 +339,8 @@ struct policy_entry {
 	__u8		deny:1,
 			pad:7;
 	__u8		auth_type;
-	__u16		pad1;
-	__u16		pad2;
+	__u16		pad1;	// XXX match_type
+	__u16		pad2;	// XXX priority to validate in tests
 	__u64		packets;
 	__u64		bytes;
 };

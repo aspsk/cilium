@@ -15,7 +15,7 @@
 static __always_inline int
 policy_sk_egress(__u32 identity, __u32 ip,  __u16 dport)
 {
-	void *map = lookup_ip4_endpoint_policy_map(ip); // XXX
+	void *map = lookup_ip4_endpoint_policy_map(ip);
 	int dir = CT_EGRESS;
 	__u8 proto = IPPROTO_TCP;
 	struct policy_entry *policy;
@@ -24,13 +24,13 @@ policy_sk_egress(__u32 identity, __u32 ip,  __u16 dport)
 		.sec_label = identity,
 		.dport = dport,
 		.protocol = proto,
-		.flags = !dir, // XXX: is this correct (endianess)?
+		.flags = !dir,
 	};
 
 	if (!map)
 		return CTX_ACT_OK;
 
-	/* Policy match precedence: XXX: unsupported via wildcard map, yet
+	/* Policy match precedence:
 	 * 1. id/proto/port  (L3/L4)
 	 * 2. ANY/proto/port (L4-only)
 	 * 3. id/proto/ANY   (L3-proto)
@@ -111,7 +111,7 @@ __policy_can_access(const void *map, struct __ctx_buff *ctx, __u32 local_id,
 		.sec_label = remote_id,
 		.dport = dport,
 		.protocol = proto,
-		.flags = !dir, // XXX: endianess
+		.flags = !dir,
 	};
 
 #ifdef ALLOW_ICMP_FRAG_NEEDED
@@ -179,7 +179,8 @@ __policy_can_access(const void *map, struct __ctx_buff *ctx, __u32 local_id,
 
 	/*
 	 * We can't rely on dport value for defragmented packets,
-	 * so only match wildcard port entries
+	 * so only match wildcard port entries (non-wildcard entries
+	 * will have DPortMin>0)
 	 */
 	if (is_untracked_fragment)
 		key.dport = 0;

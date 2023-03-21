@@ -122,6 +122,7 @@ enum {
         BPF_WILDCARD_RULE_PREFIX = 0,
         BPF_WILDCARD_RULE_RANGE,
         BPF_WILDCARD_RULE_MATCH,
+        BPF_WILDCARD_RULE_WILDCARD_MATCH,
 };
 
 struct wildcard_rule_desc {
@@ -141,7 +142,7 @@ enum {
 
 struct wildcard_key {
 	__u32 type;	/* WILDCARD_KEY_{RULE,ELEM} */
-	__u32 priority;	/* priority, when BPF_WILDCARD_F_PRIORITY is set */
+	__u32 priority;	/* priority, 0 is the top */
 	__u8 data[];
 };
 
@@ -155,9 +156,6 @@ struct wildcard_key {
 #define BPF_WILDCARD_F_ALGORITHM_MASK	0xff
 #define BPF_WILDCARD_ALGORITHM(flags)	(flags & BPF_WILDCARD_F_ALGORITHM_MASK)
 
-/* generic wildcard map flags, set via map_extra */
-#define BPF_WILDCARD_F_PRIORITY		(1 << 8)
-
 #define __BPF_WILDCARD_DATA__BPF_WILDCARD_RULE_PREFIX(T, FIELD)	\
 	T FIELD;						\
 	__u32 FIELD ## _prefix
@@ -167,6 +165,9 @@ struct wildcard_key {
 	T FIELD ## _max
 
 #define __BPF_WILDCARD_DATA__BPF_WILDCARD_RULE_MATCH(T, FIELD)	\
+	T FIELD
+
+#define __BPF_WILDCARD_DATA__BPF_WILDCARD_RULE_WILDCARD_MATCH(T, FIELD)	\
 	T FIELD
 
 #define __BPF_WILDCARD_DATA_RULE_1(TYPE, T, FIELD, ...) __BPF_WILDCARD_DATA__ ## TYPE (T, FIELD)

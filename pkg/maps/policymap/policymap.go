@@ -115,11 +115,9 @@ type RealPolicyKey struct {
 	Type             uint32
 	Priority         uint32
 	Identity         uint32
-	IdentityPrefix   uint32
 	DestPortMin      uint16
 	DestPortMax      uint16
 	Nexthdr          uint8
-	NexthdrPrefix    [4]uint8 // :'(
 	TrafficDirection uint8
 }
 
@@ -168,21 +166,13 @@ func newRealPolicyKey(id uint32, dport uint16, proto uint8, trafficDirection uin
 		Type:             0,
 		Priority:         0,
 		Identity:         id,
-		IdentityPrefix:   32,
 		DestPortMin:      dport,
 		DestPortMax:      dport,
 		Nexthdr:          uint8(proto),
-		NexthdrPrefix:    [4]uint8{8, 0, 0, 0},
 		TrafficDirection: trafficDirection,
-	}
-	if id == 0 {
-		key.IdentityPrefix = 0
 	}
 	if dport == 0 {
 		key.DestPortMax = 0xffff
-	}
-	if proto == 0 {
-		key.NexthdrPrefix[0] = 0
 	}
 	key.Priority = realPolicyKeySetPriority(&key)
 	return &key
