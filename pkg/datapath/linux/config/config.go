@@ -874,7 +874,9 @@ func (h *HeaderfileWriter) writeTemplateConfig(fw *bufio.Writer, e datapath.Endp
 		fmt.Fprintf(fw, "#define USE_BPF_PROG_FOR_INGRESS_POLICY 1\n")
 	}
 
-	if option.Config.ForceLocalPolicyEvalAtSource {
+	// When both the host routing and endpoint routes are enabled we need
+	// to check policies at source.
+	if option.Config.ForceLocalPolicyEvalAtSource || (option.Config.EnableEndpointRoutes && !option.Config.EnableHostLegacyRouting) {
 		fmt.Fprintf(fw, "#define FORCE_LOCAL_POLICY_EVAL_AT_SOURCE 1\n")
 	}
 
