@@ -23,6 +23,7 @@ type TestEndpoint struct {
 	Id       uint64
 	Identity *identity.Identity
 	Opts     *option.IntOptions
+	NodeMAC  mac.MAC
 	MAC      mac.MAC
 	IPv6     netip.Addr
 	isHost   bool
@@ -34,7 +35,8 @@ func NewTestEndpoint() TestEndpoint {
 	return TestEndpoint{
 		Id:       42,
 		Identity: defaultIdentity,
-		MAC:      mac.MAC([]byte{0x02, 0x00, 0x60, 0x0D, 0xF0, 0x0D}),
+		NodeMAC:  mac.MAC([]byte{0x02, 0x00, 0x60, 0x0D, 0xF0, 0x0D}),
+		MAC:      mac.MAC([]byte{0x02, 0x00, 0x60, 0x0D, 0xF0, 0x0C}),
 		Opts:     opts,
 	}
 }
@@ -45,7 +47,8 @@ func NewTestHostEndpoint() TestEndpoint {
 	return TestEndpoint{
 		Id:       65535,
 		Identity: hostIdentity,
-		MAC:      mac.MAC([]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
+		NodeMAC:  mac.MAC([]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
+		MAC:      mac.MAC([]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x07}),
 		Opts:     opts,
 		isHost:   true,
 	}
@@ -64,7 +67,8 @@ func (e *TestEndpoint) StringID() string                            { return "42
 func (e *TestEndpoint) GetIdentity() identity.NumericIdentity       { return e.Identity.ID }
 func (e *TestEndpoint) GetIdentityLocked() identity.NumericIdentity { return e.Identity.ID }
 func (e *TestEndpoint) GetSecurityIdentity() *identity.Identity     { return e.Identity }
-func (e *TestEndpoint) GetNodeMAC() mac.MAC                         { return e.MAC }
+func (e *TestEndpoint) GetNodeMAC() mac.MAC                         { return e.NodeMAC }
+func (e *TestEndpoint) GetMAC() mac.MAC                             { return e.MAC }
 func (e *TestEndpoint) GetOptions() *option.IntOptions              { return e.Opts }
 func (e *TestEndpoint) IsHost() bool                                { return e.isHost }
 

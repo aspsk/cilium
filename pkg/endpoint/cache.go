@@ -138,6 +138,7 @@ func (ep *epInfoCache) IPv6Address() netip.Addr {
 // StateDir returns the directory for the endpoint's (next) state.
 func (ep *epInfoCache) StateDir() string    { return ep.epdir }
 func (ep *epInfoCache) GetNodeMAC() mac.MAC { return ep.mac }
+func (ep *epInfoCache) GetMAC() mac.MAC     { return ep.lxcMAC }
 
 func (ep *epInfoCache) ConntrackLocalLocked() bool {
 	return ep.conntrackLocal

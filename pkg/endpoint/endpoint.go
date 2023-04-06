@@ -591,6 +591,11 @@ func (e *Endpoint) GetNodeMAC() mac.MAC {
 	return e.nodeMAC
 }
 
+// GetMAC returns the MAC address of the XXX from this endpoint's perspective.
+func (e *Endpoint) GetMAC() mac.MAC {
+	return e.mac
+}
+
 func (e *Endpoint) HasSidecarProxy() bool {
 	return e.hasSidecarProxy
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path"
 	"sync"
 
@@ -94,12 +95,22 @@ func upsertEndpointRoute(ep datapath.Endpoint, ip net.IPNet) error {
 	return route.Upsert(endpointRoute)
 }
 
+func upsertEndpointNeigbourEntry(ip, ifname, mac string) error {
+	_, err := exec.Command("ip", "-6", "neigh", "replace", ip, "dev", ifname, "lladdr", mac).Output()
+	return err
+}
+
 func removeEndpointRoute(ep datapath.Endpoint, ip net.IPNet) error {
 	return route.Delete(route.Route{
 		Prefix: ip,
 		Device: ep.InterfaceName(),
 		Scope:  netlink.SCOPE_LINK,
 	})
+}
+
+func removeEndpointNeigbourEntry(ip, ifname, mac string) error {
+	_, err := exec.Command("ip", "-6", "neigh", "del", ip, "dev", ifname, "lladdr", mac).Output()
+	return err
 }
 
 // We need this function when patching an object file for which symbols were
@@ -332,6 +343,13 @@ func (l *Loader) reloadDatapath(ctx context.Context, ep datapath.Endpoint, dirs 
 			if err := upsertEndpointRoute(ep, *iputil.AddrToIPNet(ip)); err != nil {
 				scopedLog.WithError(err).Warn("Failed to upsert route")
 			}
+
+			if mac, err := ep.GetMAC().ToString(); err == nil {
+				if err := upsertEndpointNeigbourEntry(ip.String(), ep.InterfaceName(), mac); err != nil {
+					scopedLog.WithError(err).Warn("Failed to upsert neighbour entry")
+				}
+				scopedLog.Warn(fmt.Sprintf("Upserted neighbour entry %s-%s-%s", ip.String(), ep.InterfaceName(), mac))
+			}
 		}
 	}
 
@@ -474,6 +492,9 @@ func (l *Loader) Unload(ep datapath.Endpoint) {
 
 		if ip := ep.IPv6Address(); ip.IsValid() {
 			removeEndpointRoute(ep, *iputil.AddrToIPNet(ip))
+			if mac, err := ep.GetMAC().ToString(); err == nil {
+				removeEndpointNeigbourEntry(ip.String(), ep.InterfaceName(), mac)
+			}
 		}
 	}
 }

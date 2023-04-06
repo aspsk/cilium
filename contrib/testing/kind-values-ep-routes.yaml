@@ -1,0 +1,41 @@
+debug:
+  enabled: true
+image:
+  override: "localhost:5000/cilium/cilium-dev:local"
+  pullPolicy: Never
+operator:
+  image:
+    override: "localhost:5000/cilium/operator-generic:local"
+    pullPolicy: Never
+    suffix: ""
+  nodeSelector:
+    kubernetes.io/os: linux
+    kubernetes.io/hostname: kind-worker
+ipam:
+  mode: kubernetes
+ipv6:
+  enabled: true
+ipv4:
+  enabled: true
+bpf:
+  monitorAggregation: none
+  masquerade: true
+enableIPv6Masquerade: false
+livenessProbe:
+  failureThreshold: 9999
+readinessProbe:
+  failureThreshold: 9999
+startupProbe:
+  failureThreshold: 9999
+endpointRoutes:
+  enabled: true
+nodePort:
+  enabled: true
+hostPort:
+  enabled: true
+tunnel: vxlan
+autoDirectNodeRoutes: false
+ipv4NativeRoutingCIDR: "10.217.0.0/16"
+hostFirewall:
+  enabled: true
+kubeProxyReplacement: strict

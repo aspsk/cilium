@@ -37,6 +37,14 @@ func (m MAC) String() string {
 	return net.HardwareAddr(m).String()
 }
 
+// ToString returns the string representation of m and error if the mac is broken
+func (m MAC) ToString() (string, error) {
+	if m == nil || len(m) != 6 {
+		return "", fmt.Errorf("invalid MAC address %v", m)
+	}
+	return net.HardwareAddr(m).String(), nil
+}
+
 // ParseMAC parses s only as an IEEE 802 MAC-48.
 func ParseMAC(s string) (MAC, error) {
 	ha, err := net.ParseMAC(s)

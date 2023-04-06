@@ -30,7 +30,8 @@ var (
 	templateIPv4 = [4]byte{192, 0, 2, 3}
 	templateIPv6 = [16]byte{0x20, 0x01, 0xdb, 0x8, 0x0b, 0xad, 0xca, 0xfe, 0x60, 0x0d, 0xbe, 0xe2, 0x0b, 0xad, 0xca, 0xfe}
 
-	templateMAC = mac.MAC([]byte{0x02, 0x00, 0x60, 0x0D, 0xF0, 0x0D})
+	templateNodeMAC = mac.MAC([]byte{0x02, 0x00, 0x60, 0x0D, 0xF0, 0x0D})
+	templateMAC     = mac.MAC([]byte{0x02, 0x00, 0x60, 0x0D, 0xF0, 0x0C})
 
 	elfMapPrefixes = []string{
 		policymap.MapName,
@@ -101,6 +102,12 @@ func (t *templateCfg) GetIdentityLocked() identity.NumericIdentity {
 // GetNodeMAC returns a well-known dummy MAC address which may be later
 // substituted in the ELF.
 func (t *templateCfg) GetNodeMAC() mac.MAC {
+	return templateNodeMAC
+}
+
+// GetNodeMAC returns a well-known dummy MAC address which may be later
+// substituted in the ELF.
+func (t *templateCfg) GetMAC() mac.MAC {
 	return templateMAC
 }
 
