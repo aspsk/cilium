@@ -6,12 +6,20 @@ package config
 import (
 	"github.com/cilium/cilium/pkg/byteorder"
 	endpoint "github.com/cilium/cilium/pkg/endpoint/types"
+	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/option"
 )
 
 // Endpoint returns a [BPFLXC] for an Endpoint.
 func Endpoint(ep endpoint.Config, lnc *Config) any {
 	cfg := NewBPFLXC(NodeConfig(lnc))
+
+	// Override LB_SELECTION initially defined in node_config.h to force
+	// bpf_lxc to use the random backend selection algorithm for in-cluster
+	// traffic.  Otherwise, it will fail with the Maglev hash algorithm
+	// because Cilium doesn't provision the Maglev table for ClusterIP
+	// unless bpf.lbExternalClusterIP is set to true.
+	cfg.LBDefaultAlg = uint8(loadbalancer.SVCLoadBalancingAlgorithmRandom)
 
 	if ep.IPv4Address().IsValid() {
 		cfg.EndpointIPv4.Addr = ep.IPv4Address().As4()
